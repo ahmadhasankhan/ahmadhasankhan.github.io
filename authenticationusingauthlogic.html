@@ -1,0 +1,118 @@
+This will go over, from start to finish, how to implement session handling using AuthLogic in Rails 4.
+
+Run the following command in your terminal:
+
+$ rails new app_name -d mysql -T
+
+This will create an application called app_name, got to project root and add the authlogic gem,.
+$ cd app_name
+$ vim Gemfile
+/* Add line "gem 'authlogic'" somewhere in the gem file */
+
+gem 'authlogic', '~> 3.4.1'
+
+$ bundle install
+
+
+Next we’ll create our user model, controllers, and views .
+
+$ rails generate scaffold User username:string email:string crypted_password:string password_salt:string persistence_token:string authentication_token:string
+
+$ rake db:migrate
+
+
+Crypted_password persistence_token are both expected attributes from authlogic. Now we’ll need to setup our User Model to work as the authentication class.
+Now that our Model is setup, lets work on the UI. Lets add a global register link so that anybody logged out can register easily. Open your /app/views/layouts/application.html.erb file to look like this:
+If you haven’t started your server yet feel free to start it now.
+
+
+
+Open form amnd change the remove all auto generated fields and add password and password_finfirmation
+
+open users controlles and remove all password salt and add password and password_finfirmation in strong paramenter
+
+add this into user model
+
+acts_as_authentic do |c|
+    c.validate_login_field = false
+    c.login_field = :email 
+    #c.validate_password_field = true
+  end
+
+
+Where’s my session?
+
+
+Well now that we have a way to track sessions, we do authlogic. Lets create a way to login and log out. We’ll create a user_session controller to specifically handle this, once again we’ll use ruby generate with some scaffolding.
+
+$ rails g scaffold user_session username:string password:string
+
+
+This command creates a controller that expects its respective object to have two attributes: a password, and a username. As you can probably tell from now our UserSession class does not have either of these, but our User model has a username as well as a crypted_password that is mapped to password by authlogic. It also has already been setup to expect authlogic with the act_as_authentic function.
+If you open up your app/controllers/user_sessions_controller.rb you’ll see it has tons of generated code in there, we’re going to trim this down to a much nicer and more manageable file, that should look like this:
+The biggest changes here are in the destroy function. UserSession does not have a id, so one does not need to be passed in. Other than that, we just did some cosmetic changes, redirecting the create and destroy functions to to :users and changing their :flash text.
+
+Don't forget to remove migration
+
+And replace your model with 
+
+class UserSession < Authlogic::Session::Base
+  # specify configuration here, such as:
+  # logout_on_timeout true
+  # ...many more options in the documentation
+
+
+
+end
+
+Logging In and Logging Out
+
+Currently the login and logout functions are stored at user_session/create and user_session/destroy, not very pretty. Lets open up config/routes.rb and set up some cleaner urls. Your file should look like this:
+We added :user_sessions to the resources, this is required for the login form submission. We then wrote to name match rules to change create routes for /login and /logout, this is a little more user friendly.
+Now lets create the login link. We’ll want this link available everywhere, right next to our Register link preferably. Open up app/views/layouts/application.html.erb, and change the body to look like this
+Since our route defines the login link as :login we can just refer to it as such, very easy and clean.
+There are couple more quick UI changes, in app/views/user_sessions/new.html.erb change the h1 tag to say â€œLoginâ€. In app/views/user_sessions/_form.html.erb change the password field to f.password_field just like we did in the register form.
+
+
+
+
+Feel free to login now.
+
+
+
+
+ resources :user_sessions
+  match 'login' => "user_sessions#new",      :as => :login, via: [:get, :post]
+  match 'logout' => "user_sessions#destroy", :as => :logout, via: [:get, :post]
+
+
+
+helper_method :current_user, :authorised_user, :authorised_admin, :isadmin,
+
+def current_user_session
+    return @current_user_session if defined?(@current_user_session)
+    @current_user_session = UserSession.find
+  end
+
+  def current_user
+    return @current_user if defined?(@current_user)
+    @current_user = current_user_session && current_user_session.record
+  end
+
+  def authorised_user
+    unless current_user
+      flash[:notice]="Please Login First"
+      redirect_to new_user_session_url
+    end
+  end
+
+  def authorised_admin
+    if (current_user && !isadmin(current_user))
+      flash[:notice]="Please Login First"
+      redirect_to accessdenied_users_path
+    end
+  end
+
+  def isadmin(user)
+    user.roles.map(&:name).include?("admin") rescue false
+  end
