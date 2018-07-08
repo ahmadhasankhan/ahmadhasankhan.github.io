@@ -207,6 +207,12 @@ section.success {
     max-width: 400px;
 }
 
+#portfolio .portfolio-item img {
+    height: 250px;
+}
+
+
+
 #portfolio .portfolio-item .portfolio-link .caption {
     position: absolute;
     width: 100%;
